@@ -1,121 +1,131 @@
-;; Author: Teo Chuan Kai
-;; For UQF2101A Quantitative Reasoning Foundation: Epidemics AY2020/21 S2
-;; Model for comparison between Spanish flu and swine flu pandemics
-
 globals [
-  infected
-  deaths
-  vaccinated
-  %fatality
-  current-tick
+  border    ;; Patches representing yellow border
+  angle     ;; Heading value for individual turtle
 ]
 
 turtles-own [
-  infected?       ;; bool: is person infected?
-  immune?         ;; bool: is person recovered and immune?
-  infected-time   ;; int: amount of ticks since person has been infected
-  recovered-time  ;; int:
-  vaccinated?     ;; bool: is person vaccinated?
+  country    ;; int: which country a turtle lives in
+  infected?  ;; bool: infected or not
+  recovered? ;; bool: recovered or not
+  sick-count ;; int: time since infection
 ]
 
 to setup
   clear-all
-  setup-people
-  set current-tick 0
+  setup-globals
+  setup-turtles
   reset-ticks
 end
 
-to setup-people
-  set-default-shape turtles "person"
-  crt population
-  [
+to setup-globals
+  ;; draws a vertical border at x=0 across all y values
+  set border patches with [(pxcor = 0 and abs (pycor) >= 0 )]
+  ask border [set pcolor yellow]
+end
+
+to setup-turtles
+  ;; create turtles
+  crt population [
     setxy random-xcor random-ycor
+
+    ;; check for location, set accordingly
+    ifelse xcor <= 0
+    [ set country 1]
+    [ set country 2]
+
+    ;; set local variables
     set infected? false
-    set immune? false
-    set vaccinated? false
-    set infected-time 0
+    set recovered? false
     set color white
+    set size 0.75
+
+    ;; set shape based on country
+    ifelse country = 1
+    [ set shape "circle"]
+    [ set shape "triangle"]
   ]
   ask n-of 1 turtles [get-infected]
 end
 
-to get-infected
-  set infected? true
-  set color red
-  set infected (infected + 1)
-end
-
-to get-recovered
-  set infected? false
-  set immune? true
-  set color green
-end
-
-to get-vaccinated
-  set vaccinated? true
-  set color blue
-  set vaccinated (vaccinated + 1)
-end
-
 to go
-  advance-tick
-  move
-  vaccinate
+  if (count turtles with [infected?] = 0) [stop]
+  ask turtles [move]
   infect
   recover
-  if (count turtles with [infected?] = 0) [stop]
-  update-globals
+  advance-tick
   tick
 end
 
-to advance-tick
-  set current-tick (current-tick + 1)
-  ask turtles [
-    if infected? [set infected-time (infected-time + 1)]
-  ]
-end
-
 to move
-  ask turtles [
-    rt random-float 360
-    ifelse control-measures? and current-tick > control-start
-    [ fd 1 ]
-    [ fd 2 ]
+  if travel?
+  [ if random 100 < 1 ;; chance of travelling to other country
+    [ set xcor (- xcor) ] ;; fly to other country by flipping to opposite x-coordinates
+  ]
+
+  ifelse country = 1
+  [ ;; turtle in country 1
+    ifelse xcor > (- 0.5)
+    [ ;; directly on border patch, cannot move further right
+      set angle random-float 180
+      let new-patch patch-at-heading-and-distance angle (-1)
+      if new-patch != nobody [ move-to new-patch ]
+    ]
+    [ ;; not on border patch
+      ifelse xcor < (min-pxcor + 0.5)
+      [ set angle random-float 180 ] ;; at the edge of the world, cannot move further left
+      [ set angle random-float 360 ] ;; in the middle of the world, can move anywhere
+      rt angle
+      fd 1
+    ]
+
+  ]
+  [ ;; turtle in country 2
+    ifelse xcor < 1
+    [ ;; directly on border patch, cannot move further left
+      set angle random-float 180
+      let new-patch patch-at-heading-and-distance angle (1)
+      if new-patch != nobody [ move-to new-patch ]
+    ]
+    [
+      ifelse xcor > (max-pxcor - 1)
+      [ set angle random-float 180 ] ;; at the edge of the world, cannot move further right
+      [ set angle random-float 360 ] ;; in the middle of the world, can move anywhere
+      lt angle
+      fd 1
+    ]
+
   ]
 end
 
 to infect
   ask turtles with [infected?] [
-    ask other turtles-here with [not immune? and not vaccinated?] [
+    ask other turtles-here with [not recovered?] [
       if (random-float 100) < chance-infect [get-infected]
-    ]
-    ask other turtles-here with [not immune? and vaccinated?] [
-      if (((random-float 100) * (vaccine-efficacy / 100)) < chance-infect) [get-infected]
     ]
   ]
 end
 
 to recover
   ask turtles with [infected?] [
-    if (random infected-time) > contagious-duration [
-      ifelse ((random-float 100) < chance-recover)
-      [get-recovered]
-      [ die ]
-    ]
+    if (random sick-count) > recover-time [get-recovered]
   ]
 end
 
-to vaccinate
-  if (control-measures? and current-tick > control-start) [
-    ask turtles with [not vaccinated? and not infected?] [
-      if (random-float 100) < vaccine-rate [get-vaccinated]
-    ]
-  ]
+to advance-tick
+  ask turtles with [infected?] [set sick-count (sick-count + 1)]
 end
 
-to update-globals
-  set deaths (population - count turtles)
-  set %fatality (deaths / infected) * 100
+
+to get-infected
+  set infected? true
+  set color red
+  set sick-count 0
+end
+
+to get-recovered
+  set infected? false
+  set recovered? true
+  set color blue
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -132,110 +142,39 @@ GRAPHICS-WINDOW
 1
 1
 0
-1
+0
 1
 1
 -16
 16
 -16
 16
-0
-0
+1
+1
 1
 ticks
 30.0
 
 SLIDER
-11
-16
-183
-49
+14
+23
+186
+56
 population
 population
 0
-8000
-6500.0
+500
+220.0
 1
 1
-x100k
-HORIZONTAL
-
-SLIDER
-17
-270
-190
-303
-control-start
-control-start
-0
-100
-7.0
-1
-1
-days
-HORIZONTAL
-
-SLIDER
-13
-100
-185
-133
-chance-recover
-chance-recover
-0
-100
-92.0
-1
-1
-%
-HORIZONTAL
-
-SLIDER
-12
-58
-185
-91
-contagious-duration
-contagious-duration
-0
-30
-7.0
-1
-1
-days
-HORIZONTAL
-
-SWITCH
-17
-228
-191
-261
-control-measures?
-control-measures?
-0
-1
--1000
-
-SLIDER
-12
-141
-184
-174
-chance-infect
-chance-infect
-0
-100
-16.0
-1
-1
-%
+NIL
 HORIZONTAL
 
 BUTTON
-20
-387
-86
-420
+212
+466
+275
+499
 NIL
 setup
 NIL
@@ -249,10 +188,10 @@ NIL
 1
 
 BUTTON
-94
-387
-157
-420
+284
+466
+347
+499
 NIL
 go
 T
@@ -265,89 +204,45 @@ NIL
 NIL
 1
 
-PLOT
-658
-13
-1074
-326
-Swine Flu (2008-2009) Simulation
-time
-count
-0.0
-60.0
-0.0
-3000.0
-true
-true
-"" ""
-PENS
-"population" 1.0 0 -16777216 true "" "plot count turtles"
-"infected" 1.0 0 -7171555 true "" "plot count turtles with [infected?]"
-"dead" 1.0 0 -3844592 true "" "plot deaths"
-"immune" 1.0 0 -13791810 true "" "plot count turtles with [immune?]"
-"vaccinated" 1.0 0 -8020277 true "" "plot vaccinated"
-
-MONITOR
-985
-180
-1073
-225
-NIL
-current-tick
-17
+SWITCH
+16
+73
+119
+106
+travel?
+travel?
+0
 1
-11
-
-MONITOR
-660
-335
-724
-380
-NIL
-deaths
-17
-1
-11
+-1000
 
 SLIDER
-19
-309
-191
-342
-vaccine-rate
-vaccine-rate
+11
+120
+183
+153
+chance-infect
+chance-infect
 0
 100
-10.0
+65.0
 1
 1
 %
 HORIZONTAL
 
-MONITOR
-986
-118
-1068
-179
-NIL
-%fatality
-3
-1
-15
-
 SLIDER
-19
-349
-191
-382
-vaccine-efficacy
-vaccine-efficacy
+13
+168
+185
+201
+recover-time
+recover-time
 0
-100
-95.0
+10
+7.0
 1
 1
-%
+ticks
 HORIZONTAL
 
 @#$#@#$#@
